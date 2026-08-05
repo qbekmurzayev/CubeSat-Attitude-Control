@@ -1,0 +1,10 @@
+t_settle_s = 74.09
+final_eps_e_norm = 0.00095767
+final_w_norm_radps = 0.000180107
+final_w_norm_dps = 0.0103194
+peak_torque_Nm = 0.001
+peak_torque_mNm = 1
+n_saturated_samples = 560
+frac_saturated = 0.0466628
+max_qnorm_err = 2.22045e-16
+max_attitude_diff_vs_ode45_deg = 0.000133068

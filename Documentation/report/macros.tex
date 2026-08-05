@@ -1,0 +1,34 @@
+% =============================================================
+% macros.tex
+% Notation kept consistent across the whole report.
+% =============================================================
+
+% --- Vectors and matrices ---
+\newcommand{\vect}[1]{\bm{#1}}                      % generic vector, e.g. \vect{r}
+\newcommand{\mat}[1]{\mathbf{#1}}                    % generic matrix, e.g. \mat{I}
+
+% --- Quaternion notation ---
+\newcommand{\quat}[1]{\vect{#1}}                     % quaternion symbol, e.g. \quat{q}
+\newcommand{\qvec}{\vect{\varepsilon}}               % vector part of a quaternion
+\newcommand{\qscalar}{\eta}                          % scalar part of a quaternion
+\newcommand{\qconj}[1]{#1^{*}}                       % quaternion conjugate
+\newcommand{\qerr}{\quat{q}_{e}}                     % error quaternion
+
+% --- Reference frames ---
+\newcommand{\eci}{\mathcal{F}_I}                     % Earth-Centered Inertial frame
+\newcommand{\body}{\mathcal{F}_B}                    % spacecraft body frame
+
+% --- Angular velocity / dynamics ---
+\newcommand{\angvel}{\vect{\omega}}                  % angular velocity vector
+\newcommand{\torque}{\vect{\tau}}                    % torque vector
+\newcommand{\inertia}{\mat{J}}                       % inertia tensor
+\newcommand{\skew}[1]{[#1\times]}                    % skew-symmetric cross-product operator
+
+% --- Control ---
+\newcommand{\gainKp}{K_{p}}
+\newcommand{\gainKd}{K_{d}}
+
+% --- Misc math shorthands ---
+\newcommand{\Tp}{^{\mathsf{T}}}                      % transpose
+\DeclareMathOperator{\diag}{diag}
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}

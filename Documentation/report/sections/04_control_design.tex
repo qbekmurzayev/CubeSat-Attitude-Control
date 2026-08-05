@@ -1,0 +1,89 @@
+\section{Attitude Control System Design}
+\label{sec:control}
+
+\subsection{Control Objective}
+\label{sec:control_objective}
+
+Given the two-phase scenario defined in \cref{sec:objectives} -- damping an initial post-deployment tumble rate, then slewing to and holding a target inertial attitude -- the control task can be stated as a single attitude \emph{regulation} problem: drive the spacecraft to a constant target quaternion $\quat{q}_d$ with zero angular velocity, and hold it there, starting from an arbitrary initial quaternion $\quat{q}(0)$ and angular velocity $\angvel(0)$. Formally,
+\begin{equation}
+    \lim_{t\to\infty}\quat{q}(t) = \pm\quat{q}_d, \qquad \lim_{t\to\infty}\angvel(t) = \vect{0},
+    \label{eq:control_objective}
+\end{equation}
+where the $\pm$ reflects the double-cover property of the quaternion noted in \cref{sec:attitude_rep}: $\quat{q}_d$ and $-\quat{q}_d$ represent the identical physical orientation, so either is an acceptable limit. Because $\quat{q}_d$ is fixed in $\eci$ (\cref{sec:frames}), the desired angular velocity is $\angvel_d = \vect{0}$ throughout, which is what makes this a regulation problem rather than the more general tracking problem of following a moving target.
+
+\subsection{Error Quaternion}
+\label{sec:error_quat}
+
+Feedback control requires a scalar or vector measure of how far the current attitude is from the target. The attitude error is itself represented as a quaternion, $\qerr = (\qvec_e, \qscalar_e)$, defined as
+\begin{equation}
+    \qerr = \quat{q}_d^{-1}\otimes\quat{q},
+    \label{eq:error_quat_def}
+\end{equation}
+so that $\qerr\to(\vect{0},1)$ (the identity rotation) exactly when $\quat{q}\to\pm\quat{q}_d$. This particular multiplication order -- left-multiplying $\quat{q}$ by the constant $\quat{q}_d^{-1}$, rather than right-multiplying -- is not an arbitrary choice: it is the one that makes $\qerr$ obey the same kinematic differential equation as $\quat{q}$ itself, in terms of the same body angular velocity $\angvel$, which is what makes the Lyapunov analysis in \cref{sec:pd_law} possible in closed form. This is shown directly below rather than asserted.
+
+Expanding \cref{eq:error_quat_def} with the quaternion product rule \cref{eq:quat_product}, using $\quat{q}_d^{-1}=(-\qvec_d,\qscalar_d)$, gives the component form used in the control law below:
+\begin{align}
+    \qvec_e &= \qscalar_d\,\qvec - \qscalar\,\qvec_d - \skew{\qvec_d}\,\qvec, \label{eq:error_quat_vec}\\
+    \qscalar_e &= \qscalar\qscalar_d + \qvec\Tp\qvec_d. \label{eq:error_quat_scalar}
+\end{align}
+As a check, substituting $\quat{q}=\quat{q}_d$ into \cref{eq:error_quat_vec,eq:error_quat_scalar} gives $\qvec_e=\vect{0}$, $\qscalar_e=1$, confirming zero error at the target attitude.
+
+Physically, for a small residual misalignment, $\qvec_e \approx \hat{\vect{e}}_e\,(\phi_e/2)$ by \cref{eq:quat_euleraxis}, so the vector part of the error quaternion is approximately half the (small) rotation vector still needed to reach the target -- this is what makes $\qvec_e$ a natural proportional error signal for the control law in \cref{sec:pd_law}. The scalar part $\qscalar_e = \cos(\phi_e/2)$ indicates how large the remaining rotation angle $\phi_e$ is: $\qscalar_e$ near $+1$ means a small residual rotation, while $\qscalar_e$ near $-1$ means the remaining rotation is close to a full $360^\circ$ -- a case addressed explicitly in \cref{sec:pd_law}.
+
+\Cref{eq:error_quat_def} obeys a clean kinematic equation because $\quat{q}_d$ is constant and quaternion multiplication is associative. Differentiating \cref{eq:error_quat_def} and substituting the kinematic equation \cref{eq:quat_kinematics_product} for $\dot{\quat{q}}$,
+\begin{equation}
+    \dot{\qerr} = \quat{q}_d^{-1}\otimes\dot{\quat{q}} = \quat{q}_d^{-1}\otimes\left(\tfrac{1}{2}\quat{q}\otimes\begin{pmatrix}\angvel\\0\end{pmatrix}\right) = \tfrac{1}{2}\left(\quat{q}_d^{-1}\otimes\quat{q}\right)\otimes\begin{pmatrix}\angvel\\0\end{pmatrix} = \tfrac{1}{2}\,\qerr\otimes\begin{pmatrix}\angvel\\0\end{pmatrix},
+    \label{eq:error_quat_kinematics_derivation}
+\end{equation}
+where the middle step only regroups the product ($\quat{q}_d^{-1}\otimes\quat{q}\otimes(\angvel,0)$) by associativity -- it does not require $\quat{q}_d$ to be constant to be valid algebra, but constancy of $\quat{q}_d$ is what makes $\dot{\quat{q}}_d^{-1}$ vanish in the first step. \Cref{eq:error_quat_kinematics_derivation} shows $\qerr$ satisfies exactly the same kinematic form as $\quat{q}$, \emph{with the same $\angvel$}:
+\begin{equation}
+    \dot{\qerr} = \tfrac{1}{2}\Xi(\qerr)\,\angvel,
+    \label{eq:error_quat_kinematics}
+\end{equation}
+which is used directly in the stability analysis of \cref{sec:pd_law}. This clean result is a consequence of the regulation scenario ($\quat{q}_d$ constant, i.e. $\angvel_d=\vect{0}$, \cref{sec:control_objective}); for a moving target ($\angvel_d\neq\vect{0}$) an additional term involving $\angvel_d$ would appear.
+
+\subsection{PD Controller Formulation}
+\label{sec:pd_law}
+
+\subsubsection{Control law}
+
+A proportional-derivative control law is formed directly on the quaternion vector error $\qvec_e$ and the body angular velocity $\angvel$ (equivalently the angular velocity error, since $\angvel_d=\vect{0}$):
+\begin{equation}
+    \boxed{\torque_{\text{ctrl}} = -\gainKp\,\text{sgn}(\qscalar_e)\,\qvec_e - \gainKd\,\angvel,}
+    \label{eq:pd_law}
+\end{equation}
+with scalar gains $\gainKp,\gainKd>0$. The proportional term drives the vector error $\qvec_e$ toward zero (i.e., drives the attitude toward $\quat{q}_d$), while the derivative term damps the angular velocity, both consistent with the regulation objective \cref{eq:control_objective}. The $\text{sgn}(\qscalar_e)$ factor (defined as $+1$ if $\qscalar_e\geq0$ and $-1$ otherwise) implements the standard \emph{shortest-path} correction: because $\qerr$ and $-\qerr$ represent the same physical error, and \cref{eq:error_quat_vec} shows that $\qvec_e$ changes sign along with the overall sign of $\qerr$, applying this sign correction ensures the controller always commands the rotation corresponding to the error angle $\phi_e\in(-180^\circ,180^\circ]$, rather than potentially commanding a needlessly long rotation when $\qscalar_e<0$. This is not a cosmetic detail: without it, the closed-loop system exhibits the well-documented \emph{unwinding phenomenon}, in which a spacecraft starting arbitrarily close to the target attitude (but on the $\qscalar_e<0$ branch) is driven through a nearly complete, physically unnecessary revolution before converging \cite{bhat2000, wie1985}.
+
+\subsubsection{Lyapunov stability analysis}
+
+Stability of \cref{eq:pd_law} can be shown directly from Euler's equation \cref{eq:euler_equation} and the error quaternion kinematics, without linearizing the dynamics. Consider the candidate Lyapunov function
+\begin{equation}
+    V(\qvec_e,\qscalar_e,\angvel) = 2\gainKp\left(1-|\qscalar_e|\right) + \frac{1}{2}\angvel\Tp\inertia\,\angvel,
+    \label{eq:lyapunov}
+\end{equation}
+which is positive definite about the equilibrium $(\qvec_e,\angvel)=(\vect{0},\vect{0})$: the first term is zero only when $|\qscalar_e|=1$ (i.e., $\qvec_e=\vect{0}$, since $\qvec_e\Tp\qvec_e+\qscalar_e^2=1$), and the second term is zero only when $\angvel=\vect{0}$, since $\inertia$ is positive definite (\cref{sec:dynamics}). Differentiating, using $\dot{\qscalar}_e = -\tfrac{1}{2}\qvec_e\Tp\angvel$ (the scalar-part row of \cref{eq:error_quat_kinematics}, derived in \cref{sec:error_quat}) together with $\text{sgn}(\qscalar_e)\dot{\qscalar}_e = \frac{d}{dt}|\qscalar_e|$, and using Euler's equation \cref{eq:euler_equation} for $\inertia\dot{\angvel}$:
+\begin{align}
+    \dot V &= -2\gainKp\,\text{sgn}(\qscalar_e)\dot{\qscalar}_e + \angvel\Tp\inertia\dot{\angvel} \notag\\
+    &= \gainKp\,\text{sgn}(\qscalar_e)\,\qvec_e\Tp\angvel + \angvel\Tp\left(\torque_{\text{ctrl}} - \angvel\times(\inertia\angvel)\right).
+    \label{eq:lyapunov_dot_1}
+\end{align}
+The gyroscopic term drops out identically because $\angvel\Tp(\angvel\times\inertia\angvel)=0$ for any vector triple product of this form. Substituting the control law \cref{eq:pd_law} for $\torque_{\text{ctrl}}$:
+\begin{equation}
+    \dot V = \gainKp\,\text{sgn}(\qscalar_e)\,\qvec_e\Tp\angvel - \gainKp\,\text{sgn}(\qscalar_e)\,\angvel\Tp\qvec_e - \gainKd\,\angvel\Tp\angvel = -\gainKd\,\norm{\angvel}^2 \leq 0,
+    \label{eq:lyapunov_dot_2}
+\end{equation}
+since the two proportional-term contributions are equal scalars and cancel exactly, independent of the specific values of $\qvec_e$ or $\inertia$. \Cref{eq:lyapunov_dot_2} shows the closed-loop system is Lyapunov stable for any $\gainKp,\gainKd>0$. Because $\dot V\equiv0$ only on the set $\angvel=\vect{0}$, and \cref{eq:euler_equation} shows that $\angvel\equiv\vect{0}$ can only be an invariant trajectory if $\torque_{\text{ctrl}}\equiv\vect{0}$, which by \cref{eq:pd_law} requires $\qvec_e\equiv\vect{0}$, LaSalle's invariance principle gives asymptotic convergence to $\qvec_e=\vect{0}, \angvel=\vect{0}$ \cite{wie1985,wie2008}. This confirms, without approximation, that the nonlinear gyroscopic coupling identified in \cref{sec:dynamics} does not destabilize the PD law -- it is annihilated exactly in $\dot V$ by the same triple-product identity that made it absent from the rotational kinetic energy rate in the first place.
+
+It is worth being precise about what this result does and does not establish. It shows \emph{local} asymptotic stability of the target attitude is in fact \emph{almost-global}: the only other candidate equilibrium admitted by the argument above is $\qvec_e=\vect{0}$ with $\qscalar_e=-\text{sgn}(\qscalar_e(0))$, i.e., the antipodal representation of the identity rotation, which corresponds to the same physical attitude, not a genuine second target. The $\text{sgn}(\qscalar_e)$ term in \cref{eq:pd_law} exists precisely to keep the system on the correct branch and avoid transiently approaching that antipodal point. The topological result of Bhat and Bernstein \cite{bhat2000} shows that no \emph{continuous} state feedback law can achieve a truly global, unwinding-free equilibrium on $SO(3)$; the sign-switched law \cref{eq:pd_law} is the standard, discontinuous (at $\qscalar_e=0$) way around that obstruction, and is why the switching term is included rather than treated as optional.
+
+\subsection{Control Torque Generation}
+\label{sec:torque_generation}
+
+\Cref{eq:pd_law} produces a commanded torque vector $\torque_{\text{ctrl}}\in\mathbb{R}^3$ expressed in the body principal-axis frame. Because the actuator suite defined in \cref{sec:configuration} consists of exactly three reaction wheels, one aligned with each body principal axis, the mapping from the commanded torque vector to individual wheel motor torque commands is the identity (up to the reaction-torque sign convention): each wheel is commanded to produce a motor torque equal and opposite to the corresponding component of $\torque_{\text{ctrl}}$, so that the reaction torque delivered to the spacecraft body equals $\torque_{\text{ctrl}}$ component-by-component. No control allocation (pseudo-inverse mixing matrix) is required, which is a direct consequence of choosing a minimal, non-redundant, axis-aligned wheel configuration in \cref{sec:configuration}; a four-wheel pyramid configuration, commonly used operationally for single-failure redundancy, would instead require solving an underdetermined allocation problem, which is noted as a possible extension in \cref{sec:validation}.
+
+Consistent with the actuator assumptions of \cref{sec:assumptions}, each component of $\torque_{\text{ctrl}}$ is saturated independently at the wheel's maximum torque before being applied in the simulation:
+\begin{equation}
+    \tau_{\text{applied},i} = \max\left(-\tau_{\max},\ \min\left(\tau_{\max},\ \tau_{\text{ctrl},i}\right)\right), \qquad i \in \{x,y,z\},
+    \label{eq:torque_saturation}
+\end{equation}
+with $\tau_{\max}$ given in \cref{tab:wheel_params}. Saturation is the one actuator nonideality retained in this study (\cref{sec:assumptions}); it is included because it directly bounds the achievable initial deceleration of the detumble phase in \cref{sec:methodology} and is therefore necessary for the simulated scenario to be self-consistent, even though the underlying wheel momentum-storage dynamics are not modeled.

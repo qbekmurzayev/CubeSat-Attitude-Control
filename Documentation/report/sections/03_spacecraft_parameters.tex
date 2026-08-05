@@ -1,0 +1,104 @@
+\section{Spacecraft Parameters and Assumptions}
+\label{sec:parameters}
+
+\Cref{sec:math_model} developed the equations of motion in general symbolic form. This section fixes the numerical spacecraft used to exercise those equations in \cref{sec:methodology}: a 3U CubeSat with a three-axis reaction wheel actuator suite. Every parameter below is either taken directly from the CubeSat Design Specification or computed from an explicitly stated idealized model; none is measured hardware data, and this is stated plainly rather than implied.
+
+\subsection{CubeSat Configuration}
+\label{sec:configuration}
+
+The spacecraft is a 3-Unit (3U) CubeSat with outer envelope dimensions of \SI{10x10x30}{\centi\meter}, consistent with the CubeSat Design Specification, Rev.~14.1 \cite{cubesatspec2022}. Following \cref{sec:frames}, the body frame origin is placed at the (assumed) center of mass, with $\hat z_B$ along the \SI{30}{\centi\meter} long axis and $\hat x_B,\hat y_B$ spanning the \SI{10}{\centi\meter}$\times$\SI{10}{\centi\meter} cross-section.
+
+Attitude control torque is provided by three reaction wheels, one per body axis, each idealized in \cref{sec:dynamics} as a pure torque source acting directly on the spacecraft body. This study adopts representative performance values broadly consistent with the class of commercially available CubeSat-scale reaction wheels, summarized in \cref{tab:wheel_params}. These are stated design assumptions for this simulation, not a specific vendor's measured specification sheet.
+
+\begin{table}[htbp]
+\centering
+\caption{Assumed reaction wheel actuator parameters (per axis).}
+\label{tab:wheel_params}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameter & Symbol & Value \\
+\midrule
+Maximum commandable torque & $\tau_{\max}$ & \SI{1.0}{\milli\newton\meter} \\
+Maximum angular momentum storage & $h_{\max}$ & \SI{10}{\milli\newton\meter\second} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Mass Properties}
+\label{sec:mass_props}
+
+The total spacecraft mass is set to $m = \SI{4.00}{\kilo\gram}$, the maximum mass permitted for a 3U CubeSat under the Design Specification \cite{cubesatspec2022}. The center of mass is assumed to coincide with the geometric center of the outer envelope. This is an idealization: on a physically integrated spacecraft, the center of mass is offset from the geometric center by the actual layout of the battery, avionics stacks, payload, and reaction wheels, and is normally established for a flight unit by a dedicated mass properties measurement, not assumed \cite{wertz1978}. Since \cref{sec:dynamics} formulates the dynamics about the true center of mass by construction, a center-of-mass offset in reality would principally show up as a small unmodeled disturbance torque whenever a non-mass-centered force (e.g., differential drag) acts on the spacecraft -- an effect already excluded by the disturbance-free assumption in \cref{sec:dynamics}, so the two idealizations are at least mutually consistent within the scope of this study.
+
+\subsection{Inertia Tensor Calculation}
+\label{sec:inertia_calc}
+
+Consistent with the center-of-mass assumption above, the inertia tensor is computed from a uniform-density rectangular prism model of dimensions $a\times b\times c = \SI{0.10}{\meter}\times\SI{0.10}{\meter}\times\SI{0.30}{\meter}$ (i.e., mass distributed uniformly over the outer envelope, rather than concentrated in discrete internal components). For a uniform rectangular prism, the principal moments of inertia about axes through the center of mass and parallel to the edges are \cite{hughes2004}
+\begin{equation}
+    J_x = \frac{m}{12}\left(b^2+c^2\right), \qquad
+    J_y = \frac{m}{12}\left(a^2+c^2\right), \qquad
+    J_z = \frac{m}{12}\left(a^2+b^2\right).
+    \label{eq:box_inertia}
+\end{equation}
+With $a=b=\SI{0.10}{\meter}$ (square cross-section) and $c=\SI{0.30}{\meter}$, \cref{eq:box_inertia} gives $J_x = J_y$, i.e., an axisymmetric inertia tensor about $\hat z_B$, as already anticipated in \cref{sec:dynamics}. Evaluating numerically with $m=\SI{4.00}{\kilo\gram}$:
+\begin{equation}
+    \inertia =
+    \begin{bmatrix}
+        J_x & 0 & 0 \\ 0 & J_y & 0 \\ 0 & 0 & J_z
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        0.0333 & 0 & 0 \\
+        0 & 0.0333 & 0 \\
+        0 & 0 & 0.00667
+    \end{bmatrix}
+    \; \si{\kilo\gram\meter\squared}.
+    \label{eq:inertia_numeric}
+\end{equation}
+\Cref{tab:mass_props} summarizes the adopted mass properties.
+
+\begin{table}[htbp]
+\centering
+\caption{Adopted 3U CubeSat mass properties.}
+\label{tab:mass_props}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameter & Symbol & Value \\
+\midrule
+Total mass & $m$ & \SI{4.00}{\kilo\gram} \\
+Transverse moment of inertia ($x,y$) & $J_x = J_y$ & \SI{0.0333}{\kilo\gram\meter\squared} \\
+Axial (long-axis) moment of inertia & $J_z$ & \SI{0.00667}{\kilo\gram\meter\squared} \\
+Products of inertia & $J_{xy},J_{xz},J_{yz}$ & $0$ (by principal-axis choice) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\Cref{eq:inertia_numeric} is a first-order approximation. A real, integrated 3U CubeSat is not a uniform-density block: batteries, PCB stacks, the reaction wheels themselves, and any deployable panels are discrete, non-uniformly placed masses, and their combined effect typically both shifts the numerical values in \cref{eq:inertia_numeric} and introduces small nonzero products of inertia that break the exact $J_x=J_y$ symmetry obtained here. The uniform-prism model is used because it is derivable from first principles with only the spacecraft's outer envelope and total mass -- both fixed by the Design Specification -- and it is the standard first-pass estimate used before a detailed mass properties budget or an as-built measurement is available \cite{wertz1978,sidi1997}.
+
+\subsection{Simplifying Assumptions}
+\label{sec:assumptions}
+
+The following assumptions define the scope of the simulation developed in \cref{sec:methodology}. They are collected here in one place so that the fidelity of any result in \cref{sec:results} can be traced back to a specific, stated idealization.
+
+\begin{enumerate}
+    \item \textbf{Rigid body.} The spacecraft structure is perfectly rigid; there are no flexible appendages, propellant slosh, or structural modes that couple into the rotational dynamics of \cref{eq:euler_equation}.
+    \item \textbf{Uniform mass distribution.} The inertia tensor is computed from a uniform-density outer envelope (\cref{sec:inertia_calc}), not from a discrete component-level mass budget.
+    \item \textbf{Center of mass at geometric center.} No center-of-mass offset from asymmetric internal packaging is modeled (\cref{sec:mass_props}).
+    \item \textbf{Idealized reaction wheel actuation.} Each wheel is modeled as a pure torque source, instantaneously commandable up to $\tau_{\max}$ (\cref{tab:wheel_params}), with no motor/electronics response lag, friction, cogging, or wheel imbalance-induced disturbance torque. Commanded torque is saturated at $\pm\tau_{\max}$ in the simulation, but wheel momentum storage and the coupling of wheel angular momentum into the total system angular momentum (\cref{sec:dynamics}) are not modeled; the wheel's own spin momentum is assumed small relative to spacecraft body momentum and is neglected. Momentum desaturation (e.g., via magnetorquers) is out of scope.
+    \item \textbf{No environmental disturbance torques.} Gravity-gradient, residual magnetic dipole, aerodynamic, and solar radiation pressure torques are all set to zero, as stated in \cref{sec:dynamics}.
+    \item \textbf{Perfect state knowledge.} The controller designed in \cref{sec:control} is given exact, noise-free, continuous-time quaternion and angular velocity feedback. No sensor model, measurement noise, or attitude/rate estimation filter is included.
+    \item \textbf{Fixed inertial target attitude.} The reference attitude is a constant quaternion in $\eci$, not a time-varying orbit-dependent pointing law (\cref{sec:frames}).
+    \item \textbf{Decoupled translational motion.} Orbital position and velocity are not propagated; the simulation addresses only the rotational (attitude) degrees of freedom.
+\end{enumerate}
+
+\subsection{Assessment of Modeling Fidelity}
+\label{sec:fidelity_assessment}
+
+Not all of the assumptions above carry equal weight, and it is worth ranking them by how much they would need to be relaxed before the results in \cref{sec:results} could be trusted as representative of real on-orbit behavior, rather than treating the list as uniformly acceptable.
+
+The most consequential simplification is the \emph{absence of environmental disturbance torques}. On an actual 3U CubeSat in low Earth orbit, gravity-gradient and residual dipole torques are typically small but persistent and non-zero, and a controller that has never been evaluated against them cannot be said to have demonstrated disturbance rejection -- only reference tracking in a torque-free environment. This is the single assumption most worth relaxing in any extension of this work, and it is revisited explicitly in \cref{sec:validation}.
+
+The \emph{idealized, momentum-storage-free reaction wheel model} is the second most significant simplification. Treating commanded torque as instantaneously achievable (subject only to a saturation limit) is a common and defensible simplification for a first controller design study, but it sidesteps a genuine operational concern for reaction-wheel-actuated spacecraft: wheel momentum saturates over time under any sustained disturbance or asymmetric duty cycle, and a real ADCS must periodically desaturate the wheels using an independent actuator (typically magnetorquers). A control system validated only against the idealized model in this report has not yet demonstrated that it can operate within a real momentum budget.
+
+The \emph{uniform-density inertia tensor} and \emph{centered center-of-mass} assumptions are comparatively low-risk: they affect the specific numerical values in \cref{eq:inertia_numeric} but not the structure of the dynamics or control law, and an as-built mass properties update would be a drop-in replacement for \cref{eq:inertia_numeric} without altering anything else in \cref{sec:math_model,sec:control}.
+
+Finally, the \emph{perfect state knowledge} assumption is standard practice for isolating and validating a control law's dynamic performance in a first study (it is, in effect, a truth-model simulation), but it means the results in \cref{sec:results} characterize the control law alone and say nothing about the closed-loop system's robustness to attitude determination error -- a full ADCS evaluation would additionally require a sensor and estimation subsystem, which is explicitly out of scope here (\cref{sec:objectives}).

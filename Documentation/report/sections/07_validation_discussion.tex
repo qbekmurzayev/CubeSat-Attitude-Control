@@ -1,0 +1,57 @@
+\section{Validation and Discussion}
+\label{sec:validation}
+
+\subsection{Comparison Against Expected Physical Behavior}
+\label{sec:validation_physical}
+
+Three independent checks were used to test whether the simulation in \cref{sec:results} reflects the model actually derived in \cref{sec:math_model,sec:control}, rather than an artifact of the implementation.
+
+\paragraph{Quaternion norm conservation.} \Cref{sec:kinematics} proved analytically that the continuous-time kinematic equation \cref{eq:quat_kinematics} conserves $\norm{\quat{q}}=1$ exactly (\cref{eq:norm_conservation}), and attributed any drift in simulation to discretization rather than the underlying model. \Cref{fig:qnorm_error} shows $\left|\norm{\quat{q}}-1\right|$ over the full run: it remains at the level of $10^{-16}$-$10^{-18}$ throughout, i.e., double-precision floating-point round-off, with no visible growth trend over \SI{120}{\second} and $12{,}000$ integration steps. This is the expected result given the per-step renormalization in \cref{alg:rk4}: it does not test whether \cref{eq:quat_kinematics} itself is correctly implemented (an error there could still preserve the norm while integrating the wrong direction), but it does confirm that the renormalization strategy adopted specifically to bound norm drift (\cref{sec:attitude_rep}) works as intended.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{fig_quaternion_norm_error.png}
+    \caption{Quaternion norm error over the simulation, remaining at floating-point round-off level.}
+    \label{fig:qnorm_error}
+\end{figure}
+
+\paragraph{Independent integrator cross-check.} \Cref{sec:integration} proposed comparing the primary fixed-step RK4 solution against MATLAB's adaptive \texttt{ode45} solver applied to the identical right-hand side \cref{eq:state_derivative}, as a check that the reported transient is not an artifact of the chosen step size or integration scheme. \Cref{fig:integrator_crosscheck} shows the attitude discrepancy between the two solutions, computed from the quaternion dot product, over the full run: the maximum discrepancy is $1.3\times10^{-4}$ degrees, five to six orders of magnitude smaller than any feature of interest in \cref{sec:results} (e.g., the $\sim\!\ang{120}$ overall maneuver or the $\ang{0.11}$ final error). This is strong evidence that the qualitative transient behavior discussed in \cref{sec:results_quaternion,sec:results_angvel} -- the overshoot, the secondary $\omega_y$ peak -- reflects genuine closed-loop dynamics rather than numerical error, since two structurally different integrators with independent error mechanisms agree to this precision.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{fig_integrator_crosscheck.png}
+    \caption{Attitude discrepancy between the primary fixed-step RK4 solution and an independent \texttt{ode45} solution of the same right-hand side.}
+    \label{fig:integrator_crosscheck}
+\end{figure}
+
+\paragraph{Lyapunov monotonicity.} As discussed already in \cref{sec:results_stability}, the simulated $V(t)$ decreases monotonically, matching \cref{eq:lyapunov_dot_2} exactly. This is arguably the strongest of the three checks, because it tests the \emph{closed-loop coupling} between the controller and the plant directly (both \cref{eq:pd_law,eq:euler_equation} have to be implemented consistently with each other for the exact cancellation in \cref{eq:lyapunov_dot_2} to hold), and, as recounted in \cref{sec:results_stability}, it is what actually caught a genuine implementation defect (an error-quaternion multiplication-order bug) during the development of this simulation -- a concrete illustration of why a derived stability certificate is worth checking numerically, not just citing.
+
+\paragraph{Settling time versus the linear design prediction.} \Cref{sec:gain_selection} targeted a settling time of approximately \SI{60}{\second} from a small-angle linearization that explicitly neglected the gyroscopic term. The simulated settling time is \SI{74.1}{\second} (\cref{tab:results_summary}), about 23\% longer. This gap is consistent with, and expected from, the limitations of that linearization stated at the time it was derived: the actual maneuver combines a $120^\circ$ initial attitude error with a $\sim\!\ang{19.7}$/s initial tumble simultaneously, well outside the small-$\qvec_e$, small-$\angvel$ regime the linear formula \cref{eq:linearized_error} assumes, and the wheel saturates for the first \SI{5.6}{\second} (\cref{sec:results_torque}), further slowing the response relative to the unsaturated linear prediction. The direction and rough magnitude of the discrepancy (slower than predicted, not faster or unstable) are physically sensible: both the neglected gyroscopic coupling and the saturation act to remove usable control authority from the linear design's assumptions, not add extra authority.
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\Cref{sec:fidelity_assessment} ranked the modeling assumptions of \cref{sec:parameters} by expected impact before any simulation existed; the results in \cref{sec:results} make it possible to revisit that ranking with evidence rather than only judgment, and to add limitations specific to the control design and validation scope actually exercised.
+
+\begin{itemize}
+    \item \textbf{No disturbance torques (confirmed highest-impact).} The controller in this report has demonstrated convergence to a fixed target in a torque-free environment. It has not demonstrated \emph{disturbance rejection} -- holding a target attitude against a persistent, non-zero external torque -- which is the steady-state operating condition of a real CubeSat and was already flagged in \cref{sec:fidelity_assessment} as the assumption most in need of relaxation.
+    \item \textbf{Idealized reaction wheel momentum storage.} The wheel saturation event in \cref{sec:results_torque} shows that even the limited actuator nonideality retained in this study (a static torque limit) already materially affects the transient (\cref{sec:validation_physical}). A wheel momentum-storage model would additionally show whether the wheels approach $h_{\max}$ (\cref{tab:wheel_params}) during this maneuver, which the current model cannot report because wheel momentum is not tracked as a state.
+    \item \textbf{Single scenario, not a robustness study.} \Cref{sec:results} reports one initial condition and one target attitude (\cref{tab:initial_conditions}). The Lyapunov result in \cref{sec:pd_law} is almost-global and gives confidence the controller would converge from other initial conditions, but settling time, peak torque, and saturation duration are all scenario-dependent quantities that have only been characterized at this one operating point.
+    \item \textbf{Uniform scalar gains applied to a non-isotropic plant.} The gains in \cref{tab:gains} were sized in \cref{sec:gain_selection} using the larger transverse inertia $J_x=J_y$; because $J_z$ is roughly five times smaller, the same scalar $\gainKp,\gainKd$ applied per \cref{eq:pd_law} produce a different effective closed-loop bandwidth about $\hat z_B$ than about $\hat x_B,\hat y_B$ (\cref{eq:gain_formulas}). This was an implicit consequence of the scalar-gain formulation, not a deliberately tuned design choice, and is worth flagging explicitly rather than leaving implicit.
+    \item \textbf{No sensor or estimation subsystem.} Consistent with the scope defined in \cref{sec:objectives}, $\quat{q}$ and $\angvel$ are fed to the controller exactly; the results characterize the control law in isolation, not a complete ADCS.
+\end{itemize}
+
+\subsection{Possible Improvements}
+\label{sec:improvements}
+
+The following extensions follow directly from the limitations above, ordered to roughly match their priority in \cref{sec:limitations}:
+
+\begin{enumerate}
+    \item \textbf{Add an environmental disturbance torque model} (at minimum, gravity-gradient torque, which requires no additional actuator and only depends on orbit geometry and the inertia tensor already computed in \cref{sec:inertia_calc}) and evaluate steady-state pointing error under sustained disturbance, not just convergence from a torque-free initial condition.
+    \item \textbf{Model reaction wheel angular momentum as an explicit state}, coupling it into the total system angular momentum balance rather than treating commanded torque as a free external input, and add a magnetorquer-based momentum desaturation law -- turning the idealized actuator of \cref{sec:assumptions} into a physically complete one.
+    \item \textbf{Characterize robustness over a range of scenarios} (a sweep of initial tumble rates and target attitudes, and a parametric sweep over inertia tensor uncertainty relative to the nominal value in \cref{eq:inertia_numeric}) rather than the single case in \cref{sec:results}.
+    \item \textbf{Move to per-axis (diagonal matrix) gains}, $\mat{K}_p,\mat{K}_d\in\mathbb{R}^{3\times3}$ sized individually from $J_x,J_y,J_z$ via \cref{eq:gain_formulas}, to give uniform closed-loop bandwidth on all three axes rather than the axis-dependent bandwidth noted in \cref{sec:limitations}.
+    \item \textbf{Add a sensor and attitude estimation subsystem} (e.g., a simulated gyroscope and star tracker or sun sensor feeding a multiplicative extended Kalman filter) so that closed-loop performance can be evaluated against realistic attitude knowledge error rather than the truth-model feedback used throughout this report.
+    \item \textbf{Extend to a redundant four-wheel pyramid configuration} with a pseudo-inverse control allocation law, replacing the trivial one-to-one torque mapping of \cref{sec:torque_generation} and directly addressing the single-point-of-failure limitation noted there.
+    \item \textbf{Replace the fixed inertial target with a time-varying, orbit-dependent pointing law} (e.g., nadir- or Sun-pointing via an LVLH reference frame), closing the scope simplification identified in \cref{sec:frames}.
+\end{enumerate}

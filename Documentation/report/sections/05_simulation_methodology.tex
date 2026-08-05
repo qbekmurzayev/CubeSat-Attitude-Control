@@ -1,0 +1,117 @@
+\section{Simulation Methodology}
+\label{sec:methodology}
+
+\subsection{MATLAB Implementation Architecture}
+\label{sec:matlab_architecture}
+
+The closed-loop model of \cref{sec:math_model,sec:control} is implemented in MATLAB as a small set of single-purpose functions rather than one monolithic script, so that each block corresponds directly to one derived equation and can be unit-checked independently. \Cref{tab:matlab_files} summarizes the intended module breakdown.
+
+\begin{table}[htbp]
+\centering
+\caption{MATLAB implementation modules and their corresponding equations.}
+\label{tab:matlab_files}
+\begin{tabular}{@{}p{4.2cm}p{9.3cm}@{}}
+\toprule
+File & Purpose \\
+\midrule
+\texttt{cubesat\_params.m} & Defines mass properties, inertia tensor, and wheel limits (\cref{tab:mass_props,tab:wheel_params}). \\
+\texttt{quat\_utils.m} & Quaternion product, conjugate, and quaternion-to-DCM utilities (\cref{eq:quat_product,eq:quat_to_dcm}). \\
+\texttt{attitude\_dynamics.m} & State derivative function combining quaternion kinematics (\cref{eq:quat_kinematics}) and Euler's equation (\cref{eq:euler_equation}) into a single 7-state ODE right-hand side. \\
+\texttt{pd\_controller.m} & Computes the error quaternion (\cref{eq:error_quat_vec,eq:error_quat_scalar}), evaluates the PD law (\cref{eq:pd_law}), and applies torque saturation (\cref{eq:torque_saturation}). \\
+\texttt{rk4\_integrator.m} & Fixed-step RK4 propagation of the state, with quaternion renormalization (\cref{eq:quat_norm}) applied once per step. \\
+\texttt{main\_simulation.m} & Driver script: sets initial conditions and gains, runs the integration loop, and calls the plotting routines used in \cref{sec:results}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The spacecraft state is collected into a single 7-element vector $\vect{x} = [\quat{q}\Tp,\ \angvel\Tp]\Tp \in \mathbb{R}^7$, and \texttt{attitude\_dynamics.m} implements the combined right-hand side
+\begin{equation}
+    \dot{\vect{x}} = f(\vect{x}, \torque_{\text{ctrl}}) = \begin{bmatrix} \tfrac{1}{2}\Xi(\quat{q})\,\angvel \\[4pt] \inertia^{-1}\left(\torque_{\text{ctrl}} - \angvel\times(\inertia\angvel)\right) \end{bmatrix},
+    \label{eq:state_derivative}
+\end{equation}
+directly combining \cref{eq:quat_kinematics,eq:euler_equation}. Because $\torque_{\text{ctrl}}$ in \cref{eq:state_derivative} is itself a function of the current state through \cref{eq:pd_law}, the controller is evaluated once per integration stage (i.e., \texttt{pd\_controller.m} is called from inside \texttt{attitude\_dynamics.m} or immediately before it) so that the closed-loop system, not an open-loop torque profile, is what is actually integrated.
+
+\subsection{Numerical Integration Method}
+\label{sec:integration}
+
+The state equation \cref{eq:state_derivative} is propagated using the classical fourth-order Runge-Kutta method (RK4) with a fixed time step $\Delta t$. RK4 is chosen over a variable-step solver (e.g., MATLAB's \texttt{ode45}) as the primary integrator for three reasons specific to this problem: (i) the dynamics in \cref{eq:state_derivative} are smooth and non-stiff -- there are no fast unmodeled structural or actuator modes (\cref{sec:assumptions}) that would otherwise force a variable-step solver down to very small steps -- so a fixed step is not a computational penalty here; (ii) a fixed, known step size makes it straightforward to apply the quaternion re-normalization of \cref{eq:quat_norm} at a consistent, controlled cadence and to reason about its effect on norm drift, which is one of the validation checks in \cref{sec:validation}; and (iii) fixed-step results are trivially reproducible without depending on a particular solver's internal step-size heuristics, which matters for a report whose figures must be regenerable. \Cref{alg:rk4} summarizes the per-step update.
+
+\begin{algorithm}[htbp]
+\caption{Closed-loop RK4 integration step}
+\label{alg:rk4}
+\begin{algorithmic}[1]
+\Function{RK4Step}{$\vect{x}_k$, $\Delta t$}
+    \State $\vect{k}_1 \gets f(\vect{x}_k)$ \Comment{$f$ internally evaluates \cref{eq:pd_law} at the given state}
+    \State $\vect{k}_2 \gets f(\vect{x}_k + \tfrac{\Delta t}{2}\vect{k}_1)$
+    \State $\vect{k}_3 \gets f(\vect{x}_k + \tfrac{\Delta t}{2}\vect{k}_2)$
+    \State $\vect{k}_4 \gets f(\vect{x}_k + \Delta t\,\vect{k}_3)$
+    \State $\vect{x}_{k+1} \gets \vect{x}_k + \tfrac{\Delta t}{6}\left(\vect{k}_1 + 2\vect{k}_2 + 2\vect{k}_3 + \vect{k}_4\right)$
+    \State $\quat{q}_{k+1} \gets \quat{q}_{k+1} / \norm{\quat{q}_{k+1}}$ \Comment{re-normalize per \cref{eq:quat_norm}}
+    \State \Return $\vect{x}_{k+1}$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+As a cross-check on the fixed-step RK4 results, \cref{sec:validation} additionally compares against MATLAB's adaptive \texttt{ode45} solver applied to the same right-hand side \cref{eq:state_derivative}; close agreement between the two independent integration schemes is used as evidence that the reported transient behavior in \cref{sec:results} reflects the underlying dynamics rather than an artifact of the chosen integrator or step size.
+
+\subsection{Controller Gain Selection}
+\label{sec:gain_selection}
+
+\Cref{sec:pd_law} established stability of \cref{eq:pd_law} for \emph{any} $\gainKp,\gainKd>0$, but stability alone does not fix a specific response speed. Gains are selected here from an approximate linearization valid for small attitude error. For $\qscalar_e\approx1$ and $\qvec_e$ small, \cref{eq:qvec_dot} reduces to $\dot{\qvec}_e\approx\tfrac{1}{2}\angvel$, and \cref{eq:euler_equation} reduces to $\inertia\dot{\angvel}\approx\torque_{\text{ctrl}}$ (the gyroscopic term is second-order small near equilibrium). Substituting the control law \cref{eq:pd_law} (with $\text{sgn}(\qscalar_e)=1$ near equilibrium) and eliminating $\angvel$ gives, per axis with scalar inertia $J$,
+\begin{equation}
+    \ddot{q}_{e} + \frac{\gainKd}{J}\dot{q}_{e} + \frac{\gainKp}{2J}\,q_{e} = 0,
+    \label{eq:linearized_error}
+\end{equation}
+a standard second-order form with natural frequency $\omega_n=\sqrt{\gainKp/2J}$ and damping ratio $\zeta = \gainKd/(2\sqrt{2\gainKp J})$. Solving for the gains that place $\omega_n,\zeta$ at chosen design values,
+\begin{equation}
+    \gainKp = 2J\omega_n^2, \qquad \gainKd = 2\zeta\omega_n J.
+    \label{eq:gain_formulas}
+\end{equation}
+Targeting a critically-damped-like response ($\zeta=0.7$) with a 2\%-settling time of approximately $t_s\approx4/(\zeta\omega_n)=\SI{60}{\second}$ -- a conservative, low-torque response appropriate for the small actuator budget in \cref{tab:wheel_params} -- gives $\omega_n\approx\SI{0.095}{\radian\per\second}$. Using the larger, transverse principal inertia $J=J_x=J_y=\SI{0.0333}{\kilo\gram\meter\squared}$ from \cref{tab:mass_props} in \cref{eq:gain_formulas} (the more torque-demanding axis pair) yields the gains in \cref{tab:gains}, applied identically to all three axes per the scalar-gain law \cref{eq:pd_law}.
+
+\begin{table}[htbp]
+\centering
+\caption{Adopted PD controller gains.}
+\label{tab:gains}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Parameter & Symbol & Value \\
+\midrule
+Proportional gain & $\gainKp$ & \SI{6.0e-4}{\newton\meter} \\
+Derivative gain & $\gainKd$ & \SI{4.4e-3}{\newton\meter\second} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+With these gains, the proportional term alone never exceeds $\gainKp\cdot1 = \SI{6.0e-4}{\newton\meter}$ (since $\norm{\qvec_e}\leq1$), leaving margin below $\tau_{\max}=\SI{1.0e-3}{\newton\meter}$ (\cref{tab:wheel_params}) for the derivative term to act on the initial tumble rate defined in \cref{sec:scenario} -- \cref{sec:results} shows this initial-rate torque does briefly saturate at $\tau_{\max}$, which is retained deliberately (rather than tuned away) so that the saturation logic of \cref{eq:torque_saturation} is actually exercised and its effect on convergence can be discussed in \cref{sec:validation}.
+
+\subsection{Simulation Scenario}
+\label{sec:scenario}
+
+The scenario combines the post-deployment detumble and slew-to-target phases identified in \cref{sec:objectives} into a single continuous maneuver rather than two sequential control modes. This is a direct consequence of the actuator choice: a reaction-wheel PD regulator (\cref{eq:pd_law}) acts on $\qvec_e$ and $\angvel$ simultaneously, so it damps an initial tumble rate and drives the attitude error toward zero in the same continuous control action. This differs from a magnetorquer-only architecture, where detumbling is typically handled by a distinct rate-only law (e.g., B-dot) before a separate pointing controller is engaged, because magnetic actuation cannot always produce an arbitrary commanded torque direction at a given instant -- the instantaneous control torque is constrained to lie in the plane perpendicular to the local geomagnetic field vector \cite{wisniewski1999} -- so \cref{sec:torque_generation} does not apply to that actuator type. With three-axis reaction wheels, that architectural split is unnecessary, and the "two-phase" scenario is realized here as a single transient with an initially dominant rate-damping response that smoothly gives way to a dominant attitude-error response as $\angvel\to\vect{0}$.
+
+\subsection{Initial Conditions}
+\label{sec:initial_conditions}
+
+\Cref{tab:initial_conditions} lists the adopted initial state and target attitude. The spacecraft is initialized coincident with $\eci$ ($\quat{q}(0)$ equal to the identity rotation) and given a representative post-deployment tumble rate; the target attitude $\quat{q}_d$ corresponds to a single $120^\circ$ rotation about the body-diagonal axis $\hat{\vect{e}} = \tfrac{1}{\sqrt{3}}[1,1,1]\Tp$, chosen specifically as a large-angle, non-coordinate-axis maneuver of the kind that is well-behaved for a quaternion representation but would pass close to a coordinate singularity for at least one possible Euler angle sequence -- directly exercising the representational advantage argued for in \cref{sec:why_quaternions}.
+
+\begin{table}[htbp]
+\centering
+\caption{Simulation initial conditions and target attitude.}
+\label{tab:initial_conditions}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Quantity & Symbol & Value \\
+\midrule
+Initial quaternion & $\quat{q}(0)$ & $[0,\ 0,\ 0,\ 1]\Tp$ (identity) \\
+Initial angular velocity & $\angvel(0)$ & $[10,\ -15,\ 8]\Tp$ \si{\deg\per\second} \\
+& & ($[0.175,\ -0.262,\ 0.140]\Tp$ \si{\radian\per\second}) \\
+Target quaternion & $\quat{q}_d$ & $[0.5,\ 0.5,\ 0.5,\ 0.5]\Tp$ \\
+& & ($120^\circ$ about $\tfrac{1}{\sqrt3}[1,1,1]\Tp$) \\
+Simulation duration & $T$ & \SI{120}{\second} \\
+Integration step size & $\Delta t$ & \SI{0.01}{\second} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The step size $\Delta t=\SI{0.01}{\second}$ is roughly two orders of magnitude smaller than both the control bandwidth timescale ($1/\omega_n\approx\SI{10.5}{\second}$, \cref{sec:gain_selection}) and the initial tumble rotation timescale ($\sim 1/\norm{\angvel(0)}\approx\SI{2.9}{\second}$), which is a standard oversampling margin for a fixed-step RK4 integration of a non-stiff system of this bandwidth and is refined if needed once the \texttt{ode45} cross-check of \cref{sec:integration} is available.
