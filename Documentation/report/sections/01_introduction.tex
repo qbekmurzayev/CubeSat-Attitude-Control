@@ -1,0 +1,38 @@
+\section{Introduction}
+\label{sec:intro}
+
+\subsection{Motivation for Spacecraft Attitude Control}
+\label{sec:motivation}
+
+Nearly every function a spacecraft performs depends, directly or indirectly, on knowing and controlling its orientation. Earth observation payloads must be pointed at a ground target to within the instrument's field of view; communication antennas must be aligned with a ground station or relay satellite to close a link budget; solar arrays must be oriented toward the Sun to meet the power budget; and propulsive maneuvers require the thrust vector to be pointed along a specific inertial direction to achieve the intended orbit change. The subsystem responsible for meeting these requirements -- determining the current orientation from sensor data and commanding actuators to drive the orientation toward a desired reference -- is the Attitude Determination and Control System (ADCS) \cite{wertz1978, wie2008}.
+
+Attitude control is fundamentally a rotational rigid-body dynamics and control problem: given a mass distribution (the inertia tensor), an initial angular state, and a set of available torques, drive the orientation and angular velocity of the body toward a target state while respecting actuator limits and disturbance environment. This report focuses on the dynamics and control side of that problem -- deriving the equations of motion, designing a feedback control law, and validating the resulting closed-loop behavior in simulation -- for a small satellite platform where these problems are both highly relevant and tightly constrained.
+
+\subsection{Importance of CubeSat Missions}
+\label{sec:cubesat_importance}
+
+The CubeSat standard, originated at Stanford University and California Polytechnic State University in 1999, defines spacecraft in discrete units ("U") of approximately \SI{10x10x10}{\centi\meter} and \SI{1.33}{\kilo\gram} per unit, allowing multiple satellites to share a single launch and a standardized deployment mechanism \cite{cubesatspec2022}. This standardization has driven a sharp reduction in the cost and lead time of getting a spacecraft to orbit, and CubeSats are now routinely used for Earth observation, technology demonstration, scientific instrumentation, and educational missions that would previously have been infeasible for a university research group or a small team.
+
+That accessibility comes with a corresponding set of constraints that make attitude control disproportionately difficult relative to a larger spacecraft. A CubeSat's small moment arms limit the torque that magnetic or aerodynamic effects can produce, its limited surface area constrains power available to actuators, and its low mass and inertia make it more susceptible to disturbance torques relative to the torque authority of its actuators. As a result, ADCS design remains one of the more demanding subsystem engineering problems in the CubeSat class, and it is a natural subsystem through which to demonstrate rigid-body dynamics and control competency at the level expected of a graduate aerospace engineering applicant.
+
+\subsection{Why Quaternion Representation Is Used}
+\label{sec:why_quaternions}
+
+Spacecraft orientation must be represented numerically before it can be propagated or controlled. The most intuitive representation, a sequence of three Euler angles, is attractive because each angle has a direct physical interpretation as a rotation about a body or reference axis. However, Euler angle sets are known to exhibit a mathematical singularity, commonly called gimbal lock, at specific orientations where two of the three rotation axes become aligned. Near this singularity the equations relating angular velocity to the rate of change of the Euler angles become ill-conditioned, and at the singularity itself one degree of rotational freedom is lost algebraically even though the physical spacecraft retains full three-axis freedom \cite{shuster1993}. For a spacecraft that must be capable of arbitrary large-angle reorientations -- such as the slew maneuver considered later in this report -- this is not merely a numerical inconvenience; it can occur within the operational envelope of the mission.
+
+The unit quaternion avoids this problem. A quaternion parameterizes an orientation using four parameters rather than three, at the cost of carrying one redundant degree of freedom that is removed by enforcing a unit-norm constraint. In exchange, the quaternion kinematic and composition equations are free of trigonometric singularities everywhere on the rotation group, are computationally cheaper to propagate than a full $3\times3$ direction cosine matrix (6 independent parameters), and compose through a single bilinear product rather than repeated matrix multiplication \cite{markley2014, wie1985}. These properties make the quaternion the standard attitude representation in operational spacecraft ADCS software, and they are the reason it is adopted as the state representation for the dynamics and control formulation developed in \cref{sec:math_model}.
+
+\subsection{Project Objectives}
+\label{sec:objectives}
+
+The objective of this project is to develop, implement, and analyze a quaternion-based rigid-body attitude dynamics and control simulation for a representative 3U CubeSat. Specifically, the report:
+
+\begin{enumerate}
+    \item derives the quaternion kinematic differential equation and Euler's rigid-body rotational equations of motion from first principles, and explains the physical meaning of each term (\cref{sec:math_model});
+    \item defines a physically plausible set of 3U CubeSat mass properties and an inertia tensor, and states the simplifying assumptions under which they are computed (\cref{sec:parameters});
+    \item formulates a proportional-derivative (PD) attitude control law acting on the quaternion attitude error and body angular velocity, and maps the resulting control torque to a three-axis reaction wheel actuator model (\cref{sec:control});
+    \item implements the resulting closed-loop system in MATLAB using a fixed-step numerical integrator, and defines a two-phase simulation scenario consisting of post-deployment rate damping (detumbling) followed by a large-angle slew to a target attitude (\cref{sec:methodology});
+    \item analyzes the simulated quaternion, angular velocity, and control torque time histories, and validates the results against known physical invariants of the rigid-body model (\cref{sec:results,sec:validation}).
+\end{enumerate}
+
+The scope of this project is intentionally limited to the dynamics and control problem in a deterministic, truth-model setting: attitude determination (sensor modeling, filtering, and state estimation) and the environmental disturbance torque environment are outside the present scope and are identified explicitly as simplifying assumptions in \cref{sec:parameters} and as candidate extensions in \cref{sec:validation}.

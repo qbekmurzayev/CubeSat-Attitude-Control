@@ -1,0 +1,14 @@
+# Normalize line endings on commit
+* text=auto
+
+# Explicitly text
+*.m    text
+*.tex  text
+*.md   text
+*.bib  text
+*.txt  text
+
+# Explicitly binary
+*.png  binary
+*.pdf  binary
+*.mat  binary

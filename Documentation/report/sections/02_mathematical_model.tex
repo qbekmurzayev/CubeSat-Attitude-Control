@@ -1,0 +1,182 @@
+\section{Spacecraft Mathematical Model}
+\label{sec:math_model}
+
+This section develops the mathematical model used to propagate the spacecraft's orientation and angular velocity in time. Two reference frames are defined in \cref{sec:frames}. The attitude representation problem is discussed in \cref{sec:attitude_rep}, motivating the choice of the unit quaternion over Euler angles. The quaternion kinematic differential equation is then derived in \cref{sec:kinematics}, and the rigid-body rotational equations of motion (Euler's equations) are derived in \cref{sec:dynamics}. Together, \cref{sec:kinematics,sec:dynamics} form the coupled state-space model that is integrated numerically in \cref{sec:methodology}.
+
+\subsection{Coordinate Reference Frames}
+\label{sec:frames}
+
+Two right-handed, orthonormal reference frames are used throughout this report.
+
+\paragraph{Earth-Centered Inertial (ECI) frame, $\eci$.} The ECI frame has its origin at the Earth's center of mass. Its $\hat{Z}_I$ axis is aligned with the Earth's mean rotation axis (celestial pole), its $\hat{X}_I$ axis points toward the vernal equinox direction at a reference epoch, and $\hat{Y}_I$ completes the right-handed triad. Unlike an Earth-fixed frame, $\eci$ does not rotate with the Earth, which makes it (to the accuracy needed here) a valid Newtonian inertial frame in which Euler's rotational equation of motion, derived in \cref{sec:dynamics}, holds without the fictitious torque terms that would otherwise arise from a rotating or accelerating reference \cite{curtis2020, wertz1978}. All target/reference attitudes in this report are specified as fixed orientations relative to $\eci$.
+
+\paragraph{Spacecraft body frame, $\body$.} The body frame is fixed to the spacecraft structure, with its origin at the spacecraft center of mass. Its axes $\hat{x}_B, \hat{y}_B, \hat{z}_B$ are chosen, where possible, to coincide with the spacecraft's principal axes of inertia (\cref{sec:parameters}), which is the standard convention because it eliminates the off-diagonal products of inertia from the equations of motion in \cref{sec:dynamics}. For the 3U CubeSat considered in this report, $\hat{z}_B$ is taken along the long (\SI{30}{\centi\meter}) edge of the spacecraft and $\hat{x}_B, \hat{y}_B$ span the square (\SI{10}{\centi\meter} $\times$ \SI{10}{\centi\meter}) cross-section.
+
+\paragraph{Attitude as a frame transformation.} The spacecraft attitude is the orientation of $\body$ relative to $\eci$, represented by the direction cosine matrix (DCM) $\mat{C}$ such that a vector $\vect{v}$ expressed in inertial coordinates is expressed in body coordinates as
+\begin{equation}
+    \vect{v}_B = \mat{C}\,\vect{v}_I .
+    \label{eq:dcm_transform}
+\end{equation}
+$\mat{C}$ is proper orthogonal ($\mat{C}\Tp\mat{C} = \mat{I}_3$, $\det\mat{C}=1$) and therefore has only three independent degrees of freedom, even though it contains nine entries. \Cref{sec:attitude_rep} discusses two ways of parameterizing $\mat{C}$ with a minimal (three-parameter) and a redundant (four-parameter) set, respectively.
+
+\emph{Scope note:} because attitude determination and Earth-relative pointing laws (e.g., nadir- or Sun-pointing, which require an orbit/LVLH frame) are outside the scope defined in \cref{sec:objectives}, the target attitude used in \cref{sec:methodology} is a fixed quaternion in $\eci$ rather than a time-varying, orbit-dependent target. This is a simplification relative to an operational pointing law and is revisited in \cref{sec:validation}.
+
+\subsection{Attitude Representation}
+\label{sec:attitude_rep}
+
+\subsubsection{Euler angles and the gimbal lock singularity}
+
+A common minimal parameterization of $\mat{C}$ uses three sequential rotation angles (Euler or Tait-Bryan angles). For the aerospace-standard 3-2-1 (yaw-pitch-roll) sequence, the body frame is reached from the inertial frame by a yaw rotation $\psi$ about $\hat{Z}$, followed by a pitch rotation $\theta$ about the new $\hat{Y}$, followed by a roll rotation $\phi$ about the new $\hat{X}$, so that $\mat{C} = \mat{C}_1(\phi)\,\mat{C}_2(\theta)\,\mat{C}_3(\psi)$. The appeal of this representation is purely physical: each of the three angles corresponds directly to an intuitive rotation.
+
+The drawback is that the kinematic differential equations relating the Euler angle rates to the body angular velocity $\angvel = [p\;\; q\;\; r]\Tp$ contain a $\sec\theta$ term \cite{wie2008, markley2014}:
+\begin{equation}
+    \begin{bmatrix} \dot\phi \\ \dot\theta \\ \dot\psi \end{bmatrix}
+    =
+    \begin{bmatrix}
+        1 & \sin\phi\tan\theta & \cos\phi\tan\theta \\
+        0 & \cos\phi & -\sin\phi \\
+        0 & \sin\phi\sec\theta & \cos\phi\sec\theta
+    \end{bmatrix}
+    \begin{bmatrix} p \\ q \\ r \end{bmatrix}.
+    \label{eq:euler_kinematics}
+\end{equation}
+At $\theta = \pm 90^\circ$, $\sec\theta \to \infty$: the roll and yaw axes become instantaneously aligned (the physical origin of the term \emph{gimbal lock}), one row of \cref{eq:euler_kinematics} becomes undefined, and a finite body rotation rate can require an infinite Euler angle rate to represent it. The spacecraft itself loses no physical degree of freedom at this orientation -- only the three-parameter \emph{representation} of its attitude becomes singular. For a spacecraft restricted to small pointing excursions about a single known orientation, the singularity can often be steered around by choosing the reference orientation appropriately. That workaround is not available here: \cref{sec:methodology} defines a large-angle slew scenario in which the attitude is not confined to a small neighborhood of any single orientation, so a singularity-free representation is required.
+
+\subsubsection{Quaternion representation}
+
+The unit quaternion represents an attitude with four parameters instead of three. Writing the quaternion as
+\begin{equation}
+    \quat{q} = \begin{bmatrix} \qvec \\ \qscalar \end{bmatrix}, \qquad
+    \qvec = \begin{bmatrix} q_1 \\ q_2 \\ q_3\end{bmatrix} \in \mathbb{R}^3, \quad \qscalar \in \mathbb{R},
+    \label{eq:quat_def}
+\end{equation}
+the vector part $\qvec$ and scalar part $\qscalar$ are related to the Euler axis/angle representation of the same rotation -- a single rotation by angle $\phi$ about a fixed unit axis $\hat{\vect{e}}$ (Euler's rotation theorem guarantees such an axis always exists) -- by
+\begin{equation}
+    \qvec = \hat{\vect{e}}\sin\!\left(\frac{\phi}{2}\right), \qquad \qscalar = \cos\!\left(\frac{\phi}{2}\right).
+    \label{eq:quat_euleraxis}
+\end{equation}
+No trigonometric inverse of the form $1/\cos\theta$ appears anywhere in the quaternion kinematics derived in \cref{sec:kinematics}, so \cref{eq:quat_euleraxis} is well-defined for every physical orientation, including $\theta = \pm90^\circ$ in the Euler angle sense. This comes at the cost of a fourth, redundant parameter: \cref{eq:quat_euleraxis} shows $q_1^2+q_2^2+q_3^2+\qscalar^2 = \sin^2(\phi/2) + \cos^2(\phi/2) = 1$, so only three of the four quaternion components are independent.
+
+The corresponding DCM, obtained by substituting \cref{eq:quat_euleraxis} into the Euler axis/angle rotation formula (Rodrigues' formula), is
+\begin{equation}
+    \mat{C}(\quat{q}) = (\qscalar^2 - \qvec\Tp\qvec)\,\mat{I}_3 + 2\,\qvec\qvec\Tp - 2\qscalar\,\skew{\qvec},
+    \label{eq:quat_to_dcm}
+\end{equation}
+where $\skew{\qvec}$ is the skew-symmetric matrix such that $\skew{\qvec}\vect{x} = \qvec\times\vect{x}$ for any $\vect{x}\in\mathbb{R}^3$. \Cref{eq:quat_to_dcm} is used whenever the quaternion state needs to be converted to a physically interpretable rotation, such as for plotting an equivalent Euler angle time history in \cref{sec:results}.
+
+\subsubsection{Quaternion normalization}
+
+Because only a unit-norm quaternion corresponds to a valid, proper-orthogonal DCM through \cref{eq:quat_to_dcm}, the constraint
+\begin{equation}
+    \norm{\quat{q}} = \sqrt{\qvec\Tp\qvec + \qscalar^2} = 1
+    \label{eq:quat_norm}
+\end{equation}
+must hold at all times. \Cref{sec:kinematics} shows that this constraint is preserved exactly by the continuous-time kinematic differential equation; however, a discrete-time numerical integrator (\cref{sec:methodology}) satisfies \cref{eq:quat_norm} only approximately, and small errors accumulate over many integration steps. This is monitored directly in \cref{sec:validation} as a check on simulation fidelity, and re-normalization ($\quat{q} \leftarrow \quat{q}/\norm{\quat{q}}$ after each integration step) is used as a standard corrective measure.
+
+\subsection{Quaternion Kinematics}
+\label{sec:kinematics}
+
+This section derives the differential equation governing the time evolution of the attitude quaternion, $\dot{\quat{q}} = f(\quat{q}, \angvel)$, which is the kinematic half of the coupled dynamic model integrated in \cref{sec:methodology}.
+
+\subsubsection{Quaternion multiplication}
+
+Let two quaternions be written in scalar/vector-part form, $p = (\vect{p}_v, p_s)$ and $q = (\vect{q}_v, q_s)$. The quaternion (Hamilton) product $p\otimes q$, which composes the rotation represented by $q$ followed by the rotation represented by $p$, is
+\begin{equation}
+    p \otimes q = \begin{pmatrix} p_s\vect{q}_v + q_s\vect{p}_v + \vect{p}_v\times\vect{q}_v \\[2pt] p_s q_s - \vect{p}_v\Tp\vect{q}_v \end{pmatrix}.
+    \label{eq:quat_product}
+\end{equation}
+A three-vector $\vect{v}$ can be embedded in the quaternion algebra as a \emph{pure} quaternion $\bar{\vect{v}} = (\vect{v}, 0)$, and the finite-rotation analogue of \cref{eq:dcm_transform} is $\bar{\vect{v}}_B = \quat{q}\otimes\bar{\vect{v}}_I\otimes\qconj{\quat{q}}$, where $\qconj{\quat{q}} = (-\qvec, \qscalar)$ is the quaternion conjugate (for a unit quaternion, $\qconj{\quat{q}} = \quat{q}^{-1}$).
+
+\subsubsection{Derivation of the kinematic differential equation}
+
+Consider the attitude quaternion $\quat{q}(t)$ that carries vectors from $\eci$ to $\body$, and let $\angvel(t)$ be the instantaneous angular velocity of $\body$ relative to $\eci$, expressed in body-frame coordinates. Over an infinitesimal interval $dt$, the body frame rotates by an infinitesimal angle $\norm{\angvel}\,dt$ about the instantaneous axis $\angvel/\norm{\angvel}$, as seen \emph{in the body frame itself}. By \cref{eq:quat_euleraxis}, this infinitesimal rotation is represented by the incremental quaternion
+\begin{equation}
+    \delta\quat{q} = \begin{pmatrix} \dfrac{\angvel}{\norm{\angvel}}\sin\!\left(\dfrac{\norm{\angvel}\,dt}{2}\right) \\[6pt] \cos\!\left(\dfrac{\norm{\angvel}\,dt}{2}\right) \end{pmatrix}
+    \;\xrightarrow[dt\to 0]{}\;
+    \begin{pmatrix} \tfrac{1}{2}\angvel\,dt \\[2pt] 1 \end{pmatrix} + O(dt^2).
+    \label{eq:incremental_quat}
+\end{equation}
+Because $\angvel$ is expressed in the (already-rotated) body frame, the incremental rotation is applied by composing it \emph{after} the existing attitude, i.e. by right-multiplication in the sense of \cref{eq:quat_product}:
+\begin{equation}
+    \quat{q}(t+dt) = \quat{q}(t)\otimes\delta\quat{q}.
+    \label{eq:quat_update}
+\end{equation}
+Physically, \cref{eq:quat_update} states that the orientation at $t+dt$ is obtained by first reaching the orientation at $t$, then applying the small additional rotation caused by the body's own angular velocity, measured in the frame that is doing the rotating. Substituting \cref{eq:incremental_quat} into \cref{eq:quat_update}, expanding the product with \cref{eq:quat_product} for $p=\quat{q}(t)$ and $q = \delta\quat{q}$, keeping only terms to $O(dt)$, and taking the limit $dt\to 0$ gives
+\begin{equation}
+    \dot{\quat{q}} = \frac{1}{2}\,\quat{q}\otimes\begin{pmatrix}\angvel\\0\end{pmatrix}.
+    \label{eq:quat_kinematics_product}
+\end{equation}
+Expanding the product explicitly using \cref{eq:quat_product} with $p_s = \qscalar$, $\vect{p}_v=\qvec$, $\vect{q}_v = \angvel$, $q_s = 0$ yields the component form
+\begin{align}
+    \dot{\qvec} &= \frac{1}{2}\left(\qscalar\,\mat{I}_3 + \skew{\qvec}\right)\angvel, \label{eq:qvec_dot}\\
+    \dot{\qscalar} &= -\frac{1}{2}\,\qvec\Tp\angvel. \label{eq:qscalar_dot}
+\end{align}
+\Cref{eq:qvec_dot,eq:qscalar_dot} are combined into the single linear (in $\angvel$, for fixed $\quat{q}$) matrix equation
+\begin{equation}
+    \boxed{\dot{\quat{q}} = \frac{1}{2}\,\Xi(\quat{q})\,\angvel, \qquad
+    \Xi(\quat{q}) = \begin{bmatrix} \qscalar\,\mat{I}_3 + \skew{\qvec} \\ -\qvec\Tp \end{bmatrix} \in \mathbb{R}^{4\times3}.}
+    \label{eq:quat_kinematics}
+\end{equation}
+\Cref{eq:quat_kinematics} is the quaternion kinematic differential equation used to propagate attitude throughout this report.
+
+\subsubsection{Physical interpretation}
+
+The factor of $\tfrac{1}{2}$ in \cref{eq:quat_kinematics} is a direct consequence of the half-angle relation in \cref{eq:quat_euleraxis}: the quaternion double-covers the rotation group $SO(3)$ (both $\quat{q}$ and $-\quat{q}$ represent the same physical orientation), so a full-rate rotation of the body corresponds to only a half-rate rotation of the quaternion's own representative angle. \Cref{eq:qscalar_dot} shows that the scalar part decreases fastest when the angular velocity is aligned with the current vector part $\qvec$ (i.e., with the Euler rotation axis already in progress), while \cref{eq:qvec_dot} shows the vector part responding both to $\angvel$ directly (through the $\qscalar\mat{I}_3$ term) and to a component of $\angvel$ rotated by the current attitude (through the $\skew{\qvec}$ term).
+
+As a consistency check that also anticipates \cref{sec:validation}, differentiating the norm constraint \cref{eq:quat_norm} and substituting \cref{eq:quat_kinematics} gives
+\begin{equation}
+    \frac{d}{dt}\left(\quat{q}\Tp\quat{q}\right) = 2\,\quat{q}\Tp\dot{\quat{q}} = \quat{q}\Tp\Xi(\quat{q})\,\angvel = \left(\skew{\qvec}\qvec-\skew{\qvec}\qvec\right)\Tp\angvel = 0,
+    \label{eq:norm_conservation}
+\end{equation}
+using $\qvec\Tp\skew{\qvec}=\vect{0}\Tp$ and cancellation of the $\qscalar\qvec\Tp$ terms between the two rows of $\Xi(\quat{q})$. \Cref{eq:norm_conservation} confirms that \cref{eq:quat_kinematics} preserves the unit-norm constraint \emph{exactly} in continuous time for any $\angvel(t)$ -- the quaternion norm is a conserved quantity of the kinematic equation itself, not an assumption imposed on it. Any drift observed in the numerical simulation of \cref{sec:results} is therefore attributable purely to the discretization of \cref{eq:quat_kinematics}, not to the underlying continuous-time model, which is a useful diagnostic distinction when validating the implementation.
+
+\subsection{Rigid Body Rotational Dynamics}
+\label{sec:dynamics}
+
+While \cref{sec:kinematics} describes how the attitude evolves \emph{given} an angular velocity, it says nothing about what determines that angular velocity. This section derives Euler's rotational equation of motion, which relates $\dot{\angvel}$ to the applied torques and the spacecraft's mass distribution.
+
+\subsubsection{Angular momentum and the inertia tensor}
+
+For a rigid body of mass distribution $dm$, the angular momentum about the center of mass, expressed in the body frame, is
+\begin{equation}
+    \vect{H}_B = \int \vect{r}\times(\angvel\times\vect{r})\,dm = \inertia\,\angvel,
+    \label{eq:ang_momentum}
+\end{equation}
+where $\vect{r}$ is the position of the mass element relative to the center of mass and
+\begin{equation}
+    \inertia = \int \left(\left(\vect{r}\Tp\vect{r}\right)\mat{I}_3 - \vect{r}\vect{r}\Tp\right) dm
+    \label{eq:inertia_tensor_def}
+\end{equation}
+is the inertia tensor: a symmetric, positive-definite $3\times3$ matrix that is constant in time when expressed in the body frame (because $\body$ is rigidly attached to the mass distribution), but generally time-varying if expressed in $\eci$. Because $\inertia$ is symmetric, there exists a body-frame orientation -- the principal axes -- in which $\inertia$ is diagonal, $\inertia = \diag(J_x, J_y, J_z)$, with all products of inertia equal to zero \cite{hughes2004}. Choosing the body frame $\body$ to coincide with the principal axes, as noted in \cref{sec:frames}, is what allows \cref{eq:inertia_tensor_def} to be used in its simplest diagonal form in \cref{sec:parameters}.
+
+\subsubsection{Euler's rotational equation of motion}
+
+Newton's second law for rotational motion states that the \emph{inertial-frame} time derivative of angular momentum equals the applied external torque, $\left.d\vect{H}/dt\right|_{\eci} = \torque$. Because $\vect{H}_B$ in \cref{eq:ang_momentum} is naturally expressed in the rotating body frame, the inertial derivative must be related to the body-frame derivative using the transport theorem for a vector observed from a frame rotating at $\angvel$:
+\begin{equation}
+    \left.\frac{d\vect{H}}{dt}\right|_{\eci} = \left.\frac{d\vect{H}}{dt}\right|_{\body} + \angvel\times\vect{H}.
+    \label{eq:transport_theorem}
+\end{equation}
+The additional term $\angvel\times\vect{H}$ is not a physical force effect; it is the correction needed because the body-frame basis vectors themselves are rotating, and it has the same mathematical origin as the Coriolis and centripetal terms that appear when translational motion is described in a rotating frame. Substituting \cref{eq:ang_momentum} into \cref{eq:transport_theorem} and setting the result equal to $\torque$ gives
+\begin{equation}
+    \boxed{\inertia\,\dot{\angvel} = \torque - \angvel\times\left(\inertia\,\angvel\right),}
+    \label{eq:euler_equation}
+\end{equation}
+which is Euler's rotational equation of motion. In component form for the principal-axis inertia tensor $\inertia=\diag(J_x,J_y,J_z)$, \cref{eq:euler_equation} separates into the three familiar scalar equations
+\begin{align}
+    J_x\dot{p} &= \tau_x - (J_z-J_y)\,q\,r, \notag\\
+    J_y\dot{q} &= \tau_y - (J_x-J_z)\,r\,p, \label{eq:euler_scalar}\\
+    J_z\dot{r} &= \tau_z - (J_y-J_x)\,p\,q. \notag
+\end{align}
+
+\subsubsection{Physical interpretation}
+
+The term $\angvel\times(\inertia\angvel)$ in \cref{eq:euler_equation} is usually called the gyroscopic or Euler coupling torque. It vanishes identically only when $\angvel$ is aligned with a principal axis or when all three principal moments of inertia are equal. The 3U CubeSat considered here (\cref{sec:parameters}) is, to a good approximation, axisymmetric about its long ($z_B$) axis because its cross-section is square ($J_x = J_y \neq J_z$); \cref{eq:euler_scalar} shows that the spin rate $r$ about the symmetry axis then decouples from $p$ and $q$ under zero applied torque, while $p$ and $q$ remain coupled to one another -- the classical torque-free precession of a symmetric rigid body. This coupling is the mathematical origin of the precession and nutation-like behavior expected in rigid body motion, and it is also the reason the attitude controller designed in \cref{sec:control} must reject a state-dependent nonlinear term, not just track a linear plant.
+
+\subsubsection{External torque model}
+
+The applied torque in \cref{eq:euler_equation} is decomposed as
+\begin{equation}
+    \torque = \torque_{\text{ctrl}} + \torque_{\text{dist}},
+    \label{eq:torque_decomp}
+\end{equation}
+where $\torque_{\text{ctrl}}$ is the commanded reaction wheel torque derived in \cref{sec:control} and $\torque_{\text{dist}}$ collects environmental disturbance torques (gravity-gradient, residual magnetic dipole, aerodynamic drag, solar radiation pressure). Consistent with the scope defined in \cref{sec:objectives}, this report sets $\torque_{\text{dist}} = \vect{0}$: the simulation in \cref{sec:methodology} models only the control torque acting on an otherwise torque-free rigid body. This is a standard first-order simplification for isolating and validating controller behavior, but it is an idealization -- in particular, it removes the steady-state disturbance rejection problem that a real CubeSat ADCS must solve continuously -- and its consequences are discussed explicitly in \cref{sec:validation}.

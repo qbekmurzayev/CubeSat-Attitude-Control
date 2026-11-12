@@ -1,0 +1,5 @@
+sigma_sun_deg = 0.1
+sigma_mag_deg = 0.5
+mean_err_deg = 0.497695
+rms_err_deg = 0.598745
+max_err_deg = 2.37508

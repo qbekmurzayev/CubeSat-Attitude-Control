@@ -1,0 +1,82 @@
+\section{Results and Analysis}
+\label{sec:results}
+
+This section presents the output of the simulation defined in \cref{sec:methodology}: the 3U CubeSat, initialized at the identity attitude with a $[10,-15,8]\Tp$ \si{\deg\per\second} tumble (\cref{tab:initial_conditions}), is driven by the PD controller of \cref{eq:pd_law} toward the $120^\circ$ target attitude $\quat{q}_d=[0.5,0.5,0.5,0.5]\Tp$. \Cref{tab:results_summary} collects the key numerical outcomes referenced throughout this section; all values are taken directly from the RK4 simulation output.
+
+\begin{table}[htbp]
+\centering
+\caption{Key simulation outcomes.}
+\label{tab:results_summary}
+\begin{tabular}{@{}lc@{}}
+\toprule
+Metric & Value \\
+\midrule
+Settling time ($\norm{\qvec_e}<0.02$ and $\norm{\angvel}<\SI{0.01}{\radian\per\second}$, sustained) & \SI{74.1}{\second} \\
+Final attitude error, $\norm{\qvec_e}$ & $9.6\times10^{-4}$ (\ang{0.11} equiv.) \\
+Final angular velocity, $\norm{\angvel}$ & $1.8\times10^{-4}$ \si{\radian\per\second} (\ang{0.0103}/s) \\
+Peak applied torque & \SI{1.0}{\milli\newton\meter} ($=\tau_{\max}$) \\
+Fraction of run with any axis saturated & 4.7\% (first $\approx\SI{5.6}{\second}$) \\
+Max. quaternion norm error, $\left|\norm{\quat{q}}-1\right|$ & $2.2\times10^{-16}$ (machine precision) \\
+Max. RK4/\texttt{ode45} attitude discrepancy & $1.3\times10^{-4}$ \si{\degree} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Quaternion Response}
+\label{sec:results_quaternion}
+
+\Cref{fig:quat_response} shows all four quaternion components converging from the initial identity attitude toward the target $\quat{q}_d=[0.5,0.5,0.5,0.5]\Tp$ (dashed lines). The response is not a simple monotonic first-order approach: $q_2$ initially overshoots to approximately $-0.58$ before turning around and climbing to its target value of $0.5$, and $q_1, q_3$ show comparable, though smaller, non-monotonic excursions before all four components settle within the final few percent of the simulation. This behavior is consistent with the coupled, nonlinear character of \cref{eq:euler_equation} discussed in \cref{sec:dynamics}: because the maneuver combines a large initial angular rate with a large attitude error simultaneously, the transient is not well described by the small-angle, single-axis linearization used only to \emph{select} the gains in \cref{sec:gain_selection} -- that linearization was never claimed to predict the large-angle transient shape, only to size the gains, and \cref{fig:quat_response} shows the resulting closed-loop response is qualitatively more complex than the linear design model, while still converging to the correct target.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig_quaternion_response.png}
+    \caption{Attitude quaternion components (solid) versus target values (dashed).}
+    \label{fig:quat_response}
+\end{figure}
+
+\Cref{fig:euler_angles} shows the same trajectory re-expressed as equivalent 3-2-1 Euler angles via \cref{eq:quat_to_dcm} and the standard DCM-to-Euler-angle inversion, purely as a diagnostic and a physical-interpretation aid -- the simulation itself never uses Euler angles internally (\cref{sec:why_quaternions}). The roll angle $\phi$ overshoots to approximately $118^\circ$ before settling near $90^\circ$, and the pitch angle $\theta$ swings to about $-68^\circ$ before returning to $0^\circ$; the final orientation $(\phi,\theta,\psi)=(90^\circ,0^\circ,90^\circ)$ is consistent with the target DCM computed directly from $\quat{q}_d$ in \cref{sec:results_quaternion} being the coordinate-permutation matrix $\left[\begin{smallmatrix}0&1&0\\0&0&1\\1&0&0\end{smallmatrix}\right]$, itself a direct consequence of $\quat{q}_d$ representing exactly $120^\circ$ about the body diagonal $\tfrac{1}{\sqrt3}[1,1,1]\Tp$ (a rotation that cyclically permutes the coordinate axes). For this particular trajectory, $\theta$ does not reach the $\pm90^\circ$ singularity identified in \cref{sec:attitude_rep}; nonetheless, the Euler angle history exhibits substantially larger and non-monotonic excursions ($118^\circ$ roll overshoot, $68^\circ$ pitch swing) than the quaternion components in \cref{fig:quat_response}, which remain bounded in $[-1,1]$ throughout by construction -- illustrating, empirically rather than as an assumed worst case, why a representation immune to coordinate singularities was preferred for this class of maneuver.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig_euler_angles.png}
+    \caption{Equivalent 3-2-1 Euler angles, post-processed from the quaternion trajectory for interpretation only.}
+    \label{fig:euler_angles}
+\end{figure}
+
+\subsection{Angular Velocity Response}
+\label{sec:results_angvel}
+
+\Cref{fig:angvel_response} shows the body angular velocity decaying from the initial tumble $[10,-15,8]\Tp\,\si{\deg\per\second}$ to within $0.01^\circ$/s of zero by the end of the simulation. As with the quaternion response, the decay is not a clean single-time-constant exponential: $\omega_x$ shows a distinct shoulder near $t\approx5$-\SI{15}{\second} where its decay rate slows before resuming, and $\omega_y$ actually reverses sign and grows to a secondary local peak of about $\SI{4.5}{\deg\per\second}$ near $t\approx\SI{23}{\second}$ before finally decaying. This is the direct dynamical signature of the gyroscopic coupling term $\angvel\times(\inertia\angvel)$ in \cref{eq:euler_equation}: because the inertia tensor is axisymmetric but not isotropic (\cref{eq:inertia_numeric}), angular momentum is exchanged between the transverse axes during the transient exactly as anticipated qualitatively in \cref{sec:dynamics}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig_angular_velocity.png}
+    \caption{Body angular velocity response.}
+    \label{fig:angvel_response}
+\end{figure}
+
+\subsection{Control Torque Behavior}
+\label{sec:results_torque}
+
+\Cref{fig:torque_response} shows the applied (saturated) reaction wheel torque on all three axes. The $y$-axis wheel, which must counter the largest initial rate component ($\omega_y(0)=\SI{-15}{\deg\per\second}$), saturates at $\tau_{\max}=\SI{1.0}{\milli\newton\meter}$ for approximately the first \SI{5.6}{\second} of the simulation (4.7\% of the total run, \cref{tab:results_summary}), confirming the deliberate design choice flagged in \cref{sec:gain_selection}: the initial-rate torque demand does exceed the wheel's authority briefly, and the saturation logic of \cref{eq:torque_saturation} is genuinely exercised rather than being a dormant code path. After this initial interval, all three torque components settle into smooth, unsaturated transients before decaying to zero, consistent with the sub-saturation torque margin computed in \cref{sec:gain_selection} for the proportional term alone.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig_control_torque.png}
+    \caption{Applied reaction wheel torque per axis, with saturation limits shown as dashed lines.}
+    \label{fig:torque_response}
+\end{figure}
+
+\subsection{Stability Analysis}
+\label{sec:results_stability}
+
+\Cref{fig:lyapunov} plots the Lyapunov function $V(t)$ from \cref{eq:lyapunov} evaluated along the simulated trajectory, on a logarithmic scale. $V(t)$ is monotonically non-increasing over the entire \SI{120}{\second} run, decreasing by roughly six orders of magnitude, with a visible change in slope near $t\approx45$-\SI{65}{\second} corresponding to the interval where $\norm{\angvel}$ passes through its own local dip in \cref{fig:angvel_response} (recall $\dot V=-\gainKd\norm{\angvel}^2$ exactly, \cref{eq:lyapunov_dot_2}, so $\dot V$ is small precisely when $\norm{\angvel}$ is small, without $V$ ever increasing). This is a direct, non-trivial confirmation of the analytical result derived in \cref{sec:pd_law}: the closed-loop simulation obeys the exact stability certificate produced by the nonlinear Lyapunov analysis, not merely the qualitative expectation that the controller should eventually converge.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.85\textwidth]{fig_lyapunov.png}
+    \caption{Lyapunov function $V(t)$ (log scale), confirming monotonic decrease predicted by \cref{eq:lyapunov_dot_2}.}
+    \label{fig:lyapunov}
+\end{figure}
+
+This result was not obtained on the first implementation attempt. An earlier version of the controller code defined the error quaternion using the opposite quaternion multiplication order, $\qerr=\quat{q}\otimes\quat{q}_d^{-1}$ rather than \cref{eq:error_quat_def}; that version is algebraically valid as a measure of attitude error, but it does \emph{not} satisfy \cref{eq:error_quat_kinematics} for the same $\angvel$, and the resulting $V(t)$ computed from that simulation was non-monotonic, alternately decreasing and increasing over multiple $20$-\SI{40}{\second} intervals despite \cref{eq:lyapunov_dot_2} guaranteeing $\dot V\leq0$ unconditionally. This mismatch between a theoretical guarantee and simulated behavior was the signal that the implementation, not the guarantee, was wrong, and tracing it back through the derivation in \cref{sec:error_quat} located the multiplication-order error described there. This episode is included here deliberately: a Lyapunov function that fails to decrease monotonically in simulation is one of the most direct available checks that a nonlinear attitude controller implementation matches its own derivation, and it is a check worth running on any such implementation before trusting its transient results.

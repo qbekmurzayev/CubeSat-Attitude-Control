@@ -1,0 +1,44 @@
+% =============================================================
+% main.tex
+% Quaternion-Based Attitude Dynamics and Control Simulation
+% for a CubeSat -- Master's application portfolio report
+% =============================================================
+\documentclass[11pt,letterpaper]{article}
+
+\input{preamble}
+\input{macros}
+
+% Figures live in the top-level /Figures directory of the repo.
+\graphicspath{{../../Figures/}}
+
+\begin{document}
+
+\input{titlepage}
+
+\pagenumbering{roman}
+\input{sections/00_abstract}
+
+\tableofcontents
+\listoffigures
+\listoftables
+\clearpage
+
+\input{nomenclature}
+
+\clearpage
+\pagenumbering{arabic}
+
+\input{sections/01_introduction}
+\input{sections/02_mathematical_model}
+\input{sections/03_spacecraft_parameters}
+\input{sections/04_control_design}
+\input{sections/05_simulation_methodology}
+\input{sections/06_results}
+\input{sections/07_validation_discussion}
+\input{sections/08_conclusion}
+
+\clearpage
+\bibliographystyle{ieeetr}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,23 @@
+% =============================================================
+% nomenclature.tex
+% AIAA-style symbol list, placed after the front matter.
+% =============================================================
+\section*{Nomenclature}
+\addcontentsline{toc}{section}{Nomenclature}
+\begin{tabular}{@{}p{2.2cm}@{}p{13.5cm}@{}}
+$\quat{q}$        & attitude quaternion, $\quat{q} = [\qvec\Tp,\; \qscalar]\Tp$ \\
+$\qvec$           & vector (imaginary) part of a quaternion \\
+$\qscalar$        & scalar (real) part of a quaternion \\
+$\qerr$           & attitude error quaternion \\
+$\angvel$         & spacecraft angular velocity, expressed in the body frame [rad/s] \\
+$\torque$         & external/control torque vector, body frame [N$\cdot$m] \\
+$\inertia$        & spacecraft inertia tensor, body frame [kg$\cdot$m$^2$] \\
+$\eci$            & Earth-Centered Inertial reference frame \\
+$\body$           & spacecraft body-fixed reference frame \\
+$\gainKp$         & proportional control gain \\
+$\gainKd$         & derivative (rate damping) control gain \\
+$\mat{C}(\quat{q})$ & direction cosine matrix parameterized by $\quat{q}$ \\
+$\skew{\cdot}$    & skew-symmetric cross-product matrix operator \\
+\end{tabular}
+
+\clearpage

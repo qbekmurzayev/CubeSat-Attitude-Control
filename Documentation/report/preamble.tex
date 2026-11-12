@@ -1,0 +1,88 @@
+% =============================================================
+% preamble.tex
+% Package loading and global formatting for the report.
+% Style target: AIAA/IEEE technical report conventions.
+% =============================================================
+
+% --- Fonts and encoding ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{textcomp}
+
+% --- Page geometry ---
+\usepackage[letterpaper,margin=1in,headheight=14pt]{geometry}
+
+% --- Math ---
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{bm}
+
+% --- Units ---
+\usepackage{siunitx}
+\sisetup{per-mode=symbol}
+
+% --- Figures and tables ---
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{caption}
+\usepackage{subcaption}
+\captionsetup{font=small,labelfont=bf}
+
+% --- Algorithms / pseudocode ---
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+% --- Lists ---
+\usepackage{enumitem}
+\setlist{noitemsep}
+
+% --- Color ---
+\usepackage{xcolor}
+
+% --- Line spacing ---
+\usepackage{setspace}
+\onehalfspacing
+
+% --- Section/heading style (AIAA-like: bold run-in numbering) ---
+\usepackage{titlesec}
+\titleformat{\section}
+  {\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\itshape}{\thesubsubsection}{1em}{}
+\titlespacing*{\section}{0pt}{18pt}{10pt}
+\titlespacing*{\subsection}{0pt}{14pt}{8pt}
+
+% --- Headers and footers ---
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\itshape Quaternion-Based Attitude Dynamics and Control Simulation for a CubeSat}
+\fancyhead[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyhead[L]{\small\itshape Quaternion-Based Attitude Dynamics and Control Simulation for a CubeSat}
+  \fancyhead[R]{\small\thepage}
+  \renewcommand{\headrulewidth}{0.4pt}
+}
+
+% --- Cross-referencing ---
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue,
+            bookmarksnumbered=true,pdfborder={0 0 0}]{hyperref}
+\usepackage[capitalise,noabbrev]{cleveref}
+\crefname{equation}{Eq.}{Eqs.}
+\Crefname{equation}{Equation}{Equations}
+\crefname{figure}{Fig.}{Figs.}
+\crefname{table}{Table}{Tables}
+\crefname{section}{Sec.}{Secs.}
+
+% --- Misc ---
+\usepackage{xspace}
+\renewcommand{\arraystretch}{1.15}
+\numberwithin{equation}{section}
